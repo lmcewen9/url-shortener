@@ -51,7 +51,7 @@ func ReadEntry(conn *pgx.Conn) *[]Table {
 	if err != nil {
 		err = CreateTable(conn)
 		if err != nil {
-			log.Fatal("Failed to Create Table", err)
+			log.Println("Failed to Create Table: ", err)
 		}
 		return ReadEntry(conn)
 	}
@@ -61,7 +61,7 @@ func ReadEntry(conn *pgx.Conn) *[]Table {
 		var t Table
 		err = rows.Scan(&t.Id, &t.Slug, &t.OgUrl)
 		if err != nil {
-			log.Fatal("Scan failed:", err)
+			log.Println("Scan failed: ", err)
 		}
 		table = append(table, t)
 	}
@@ -69,11 +69,7 @@ func ReadEntry(conn *pgx.Conn) *[]Table {
 }
 
 func CreateEntry(slug string, ogurl string, conn *pgx.Conn) error {
-	_, err := conn.Exec(context.Background(), fmt.Sprintf(`
-		INSERT INTO urls
-		(slug, ogurl)
-		VALUES (%s, %s);
-	`, slug, ogurl))
+	_, err := conn.Exec(context.Background(), fmt.Sprintf(`INSERT INTO urls (slug, ogurl) VALUES ('%s', '%s');`, slug, ogurl))
 	if err != nil {
 		return err
 	}

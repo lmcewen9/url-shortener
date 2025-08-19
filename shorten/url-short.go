@@ -3,7 +3,6 @@ package shorten
 import (
 	"context"
 	"fmt"
-	"log"
 	"math/rand/v2"
 	"net/http"
 	"time"
@@ -52,7 +51,8 @@ func (us *URLShortener) HandleShorten(w http.ResponseWriter, r *http.Request) {
 
 	conn, err := us.DbConfig.Connect()
 	if err != nil {
-		log.Fatal("Error conntecting to Database")
+		http.Error(w, fmt.Sprintf("Error conntecting to Database: %v", err), http.StatusInternalServerError)
+		return
 	}
 	defer conn.Close(context.Background())
 
@@ -61,7 +61,8 @@ func (us *URLShortener) HandleShorten(w http.ResponseWriter, r *http.Request) {
 
 	err = CreateEntry(shortKey, ogUrl, conn)
 	if err != nil {
-		log.Fatal("Error Creating Entry")
+		http.Error(w, fmt.Sprintf("Error Creating Entry: %v", err), http.StatusInternalServerError)
+		return
 	}
 
 	shortenedURL := fmt.Sprintf("http://localhost:8080/%s", shortKey)
@@ -88,7 +89,8 @@ func (us *URLShortener) HandleRedirect(w http.ResponseWriter, r *http.Request) {
 
 	conn, err := us.DbConfig.Connect()
 	if err != nil {
-		log.Fatal("Error connecting to database", err)
+		http.Error(w, fmt.Sprintf("Error conntecting to Database: %v", err), http.StatusInternalServerError)
+		return
 	}
 	defer conn.Close(context.Background())
 
