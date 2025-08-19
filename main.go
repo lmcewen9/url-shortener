@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"fmt"
 	"log"
 	"net/http"
@@ -18,22 +17,15 @@ func main() {
 	}
 
 	dbConfig := &shorten.DataBaseConfig{
-		Host: os.Getenv("HOST"),
-		Port: os.Getenv("PORT"),
-		User: os.Getenv("USER"),
+		Host:     os.Getenv("HOST"),
+		Port:     os.Getenv("PORT"),
+		User:     os.Getenv("PUSER"),
 		Password: os.Getenv("PASSWORD"),
-		DB: os.Getenv("DB"),
+		DB:       os.Getenv("DB"),
 	}
-
-	db, err := dbConfig.Connect()
-	if err != nil {
-		log.Fatal("Error connecting to Database...")
-	}
-
-	db.Close(context.Background())
 
 	shortener := &shorten.URLShortener{
-		Urls: make(map[string]string),
+		DbConfig: dbConfig,
 	}
 
 	http.HandleFunc("/shorten", shortener.HandleShorten)

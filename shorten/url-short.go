@@ -1,14 +1,16 @@
 package shorten
 
 import (
+	"context"
 	"fmt"
+	"log"
 	"math/rand/v2"
 	"net/http"
 	"time"
 )
 
 type URLShortener struct {
-	Urls map[string]string
+	DbConfig *DataBaseConfig
 }
 
 func GenerateShortKey() string {
@@ -26,6 +28,16 @@ func GenerateShortKey() string {
 	return string(shortKey)
 }
 
+func CheckShortKey(t *[]Table) string {
+	shortKey := GenerateShortKey()
+	for _, i := range *t {
+		if shortKey == i.Slug {
+			CheckShortKey(t)
+		}
+	}
+	return shortKey
+}
+
 func (us *URLShortener) HandleShorten(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		http.Error(w, "Invalid Request Method...", http.StatusMethodNotAllowed)
@@ -38,8 +50,19 @@ func (us *URLShortener) HandleShorten(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	shortKey := GenerateShortKey()
-	us.Urls[shortKey] = ogUrl
+	conn, err := us.DbConfig.Connect()
+	if err != nil {
+		log.Fatal("Error conntecting to Database")
+	}
+	defer conn.Close(context.Background())
+
+	entries := ReadEntry(conn)
+	shortKey := CheckShortKey(entries)
+
+	err = CreateEntry(shortKey, ogUrl, conn)
+	if err != nil {
+		log.Fatal("Error Creating Entry")
+	}
 
 	shortenedURL := fmt.Sprintf("http://localhost:8080/%s", shortKey)
 
@@ -63,10 +86,22 @@ func (us *URLShortener) HandleRedirect(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	ogURL, found := us.Urls[shortKey]
-	if !found {
-		http.Error(w, "Shortened key not found...", http.StatusNotFound)
-		return
+	conn, err := us.DbConfig.Connect()
+	if err != nil {
+		log.Fatal("Error connecting to database", err)
+	}
+	defer conn.Close(context.Background())
+
+	var ogURL string
+	entries := ReadEntry(conn)
+	for _, e := range *entries {
+		if e.Slug == shortKey {
+			ogURL = e.OgUrl
+			break
+		} else {
+			http.Error(w, "Shortened key not found...", http.StatusNotFound)
+			return
+		}
 	}
 
 	http.Redirect(w, r, ogURL, http.StatusMovedPermanently)
