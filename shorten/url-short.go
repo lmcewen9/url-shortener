@@ -7,10 +7,8 @@ import (
 	"time"
 )
 
-const URL = "http://localhost:8080/"
-
 type URLShortener struct {
-	urls map[string]string
+	Urls map[string]string
 }
 
 func GenerateShortKey() string {
@@ -41,9 +39,9 @@ func (us *URLShortener) HandleShorten(w http.ResponseWriter, r *http.Request) {
 	}
 
 	shortKey := GenerateShortKey()
-	us.urls[shortKey] = ogUrl
+	us.Urls[shortKey] = ogUrl
 
-	shortenedURL := fmt.Sprintf("%s%s", URL, shortKey)
+	shortenedURL := fmt.Sprintf("http://localhost:8080/%s", shortKey)
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	responseHTML := fmt.Sprintf(`
@@ -59,13 +57,13 @@ func (us *URLShortener) HandleShorten(w http.ResponseWriter, r *http.Request) {
 }
 
 func (us *URLShortener) HandleRedirect(w http.ResponseWriter, r *http.Request) {
-	shortKey := r.URL.Path[len(URL):]
+	shortKey := r.URL.Path[len("/"):]
 	if shortKey == "" {
 		http.Error(w, "Shortened key is missing...", http.StatusBadRequest)
 		return
 	}
 
-	ogURL, found := us.urls[shortKey]
+	ogURL, found := us.Urls[shortKey]
 	if !found {
 		http.Error(w, "Shortened key not found...", http.StatusNotFound)
 		return
