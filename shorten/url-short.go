@@ -100,11 +100,12 @@ func (us *URLShortener) HandleRedirect(w http.ResponseWriter, r *http.Request) {
 		if e.Slug == shortKey {
 			ogURL = e.OgUrl
 			break
-		} else {
-			http.Error(w, "Shortened key not found...", http.StatusNotFound)
-			return
 		}
 	}
-
-	http.Redirect(w, r, ogURL, http.StatusMovedPermanently)
+	if ogURL != "" {
+		http.Redirect(w, r, ogURL, http.StatusMovedPermanently)
+	} else {
+		http.Error(w, "Shortened key not found...", http.StatusNotFound)
+		return
+	}
 }
