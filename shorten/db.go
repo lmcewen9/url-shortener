@@ -75,3 +75,15 @@ func CreateEntry(slug string, ogurl string, conn *pgx.Conn) error {
 	}
 	return nil
 }
+
+func PopulateMap(us *URLShortener) {
+	conn, err := us.DbConfig.Connect()
+	if err != nil {
+		log.Println("Failed to connect to DB: ", err)
+	}
+	defer conn.Close(context.Background())
+	table := ReadEntry(conn)
+	for _, t := range *table {
+		us.Urls[t.Slug] = t.OgUrl
+	}
+}

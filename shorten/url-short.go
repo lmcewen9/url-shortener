@@ -2,13 +2,18 @@ package shorten
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"log"
 	"math/rand/v2"
+	"net"
 	"net/http"
 	"time"
 )
 
 type URLShortener struct {
+	Urls     map[string]string
+	Stats    map[string]map[string]int
 	DbConfig *DataBaseConfig
 }
 
@@ -27,12 +32,10 @@ func GenerateShortKey() string {
 	return string(shortKey)
 }
 
-func CheckShortKey(t *[]Table) string {
+func CheckShortKey(urls map[string]string) string {
 	shortKey := GenerateShortKey()
-	for _, i := range *t {
-		if shortKey == i.Slug {
-			CheckShortKey(t)
-		}
+	if _, exists := urls[shortKey]; exists {
+		return CheckShortKey(urls)
 	}
 	return shortKey
 }
@@ -56,9 +59,9 @@ func (us *URLShortener) HandleShorten(w http.ResponseWriter, r *http.Request) {
 	}
 	defer conn.Close(context.Background())
 
-	entries := ReadEntry(conn)
-	shortKey := CheckShortKey(entries)
+	shortKey := CheckShortKey(us.Urls)
 
+	us.Urls[shortKey] = ogUrl
 	err = CreateEntry(shortKey, ogUrl, conn)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Error Creating Entry: %v", err), http.StatusInternalServerError)
@@ -66,46 +69,47 @@ func (us *URLShortener) HandleShorten(w http.ResponseWriter, r *http.Request) {
 	}
 
 	shortenedURL := fmt.Sprintf("http://localhost:8080/%s", shortKey)
-
-	w.Header().Set("Content-Type", "text/html; charset=utf-8")
-	responseHTML := fmt.Sprintf(`
-		<h2>URL Shortener</h2>
-        <p>Original URL: %s</p>
-        <p>Shortened URL: <a href="%s">%s</a></p>
-        <form method="post" action="/shorten">
-            <input type="text" name="url" placeholder="Enter a URL">
-            <input type="submit" value="Shorten">
-        </form>
-	`, ogUrl, shortenedURL, shortenedURL)
+	responseHTML := fmt.Sprintf("Shortened URL is %s", shortenedURL)
 	fmt.Fprint(w, responseHTML)
 }
 
 func (us *URLShortener) HandleRedirect(w http.ResponseWriter, r *http.Request) {
 	shortKey := r.URL.Path[len("/"):]
-	if shortKey == "" {
-		http.Error(w, "Shortened key is missing...", http.StatusBadRequest)
+	if shortKey == "" || shortKey == "stats" {
+		http.Redirect(w, r, "/create", http.StatusTemporaryRedirect)
 		return
 	}
 
-	conn, err := us.DbConfig.Connect()
-	if err != nil {
-		http.Error(w, fmt.Sprintf("Error conntecting to Database: %v", err), http.StatusInternalServerError)
-		return
-	}
-	defer conn.Close(context.Background())
-
-	var ogURL string
-	entries := ReadEntry(conn)
-	for _, e := range *entries {
-		if e.Slug == shortKey {
-			ogURL = e.OgUrl
-			break
-		}
-	}
-	if ogURL != "" {
-		http.Redirect(w, r, ogURL, http.StatusMovedPermanently)
-	} else {
+	ogURL, exists := us.Urls[shortKey]
+	if !exists {
 		http.Error(w, "Shortened key not found...", http.StatusNotFound)
 		return
 	}
+	http.Redirect(w, r, ogURL, http.StatusMovedPermanently)
+
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		log.Printf("Error splitting host and port: %v\n", err)
+	}
+	if _, exists := us.Stats[shortKey]; !exists {
+		us.Stats[shortKey] = make(map[string]int)
+		us.Stats[shortKey][host] = 1
+	} else {
+		us.Stats[shortKey][host]++
+	}
+}
+
+func (us *URLShortener) HandlerStats(w http.ResponseWriter, r *http.Request) {
+	shortKey := r.URL.Path[len("/stats/"):]
+	if shortKey == "" {
+		http.Redirect(w, r, "/create", http.StatusTemporaryRedirect)
+		return
+	}
+	data, err := json.MarshalIndent(us.Stats, "", " ")
+	if err != nil {
+		http.Error(w, fmt.Sprintf("%v", err), http.StatusInternalServerError)
+		return
+	}
+	responseData := fmt.Sprintf("Stats on %s:\n%s", shortKey, string(data))
+	fmt.Fprint(w, responseData)
 }
