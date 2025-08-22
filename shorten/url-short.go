@@ -8,6 +8,7 @@ import (
 	"math/rand/v2"
 	"net"
 	"net/http"
+	"regexp"
 	"time"
 )
 
@@ -17,7 +18,7 @@ type URLShortener struct {
 	DbConfig *DataBaseConfig
 }
 
-func GenerateShortKey() string {
+func generateShortKey() string {
 	const charset = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 	const keylength = 3
 
@@ -32,10 +33,10 @@ func GenerateShortKey() string {
 	return string(shortKey)
 }
 
-func CheckShortKey(urls map[string]string) string {
-	shortKey := GenerateShortKey()
-	if _, exists := urls[shortKey]; exists {
-		return CheckShortKey(urls)
+func (us *URLShortener) checkShortKey() string {
+	shortKey := generateShortKey()
+	if _, exists := us.Urls[shortKey]; exists {
+		return us.checkShortKey()
 	}
 	return shortKey
 }
@@ -51,7 +52,10 @@ func (us *URLShortener) HandleShorten(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "URL paramerter is missing...", http.StatusBadRequest)
 		return
 	}
-
+	re := regexp.MustCompile("^https?://\\S+")
+	if valid:= re.MatchString(ogUrl); !valid {
+		http.Error(w, "Bad Url, please provide 'http(s)://'", http.StatusBadRequest)
+	}
 	conn, err := us.DbConfig.Connect()
 	if err != nil {
 		http.Error(w, fmt.Sprintf("Error conntecting to Database: %v", err), http.StatusInternalServerError)
@@ -59,7 +63,7 @@ func (us *URLShortener) HandleShorten(w http.ResponseWriter, r *http.Request) {
 	}
 	defer conn.Close(context.Background())
 
-	shortKey := CheckShortKey(us.Urls)
+	shortKey := us.checkShortKey()
 
 	us.Urls[shortKey] = ogUrl
 	err = CreateEntry(shortKey, ogUrl, conn)
@@ -105,11 +109,17 @@ func (us *URLShortener) HandlerStats(w http.ResponseWriter, r *http.Request) {
 		http.Redirect(w, r, "/create", http.StatusTemporaryRedirect)
 		return
 	}
+
+	if _, exists := us.Urls[shortKey]; !exists {
+		http.Error(w, "Shortened key not found...", http.StatusNotFound)
+	}
+
 	data, err := json.MarshalIndent(us.Stats, "", " ")
 	if err != nil {
 		http.Error(w, fmt.Sprintf("%v", err), http.StatusInternalServerError)
 		return
 	}
+
 	responseData := fmt.Sprintf("Stats on %s:\n%s", shortKey, string(data))
 	fmt.Fprint(w, responseData)
 }
