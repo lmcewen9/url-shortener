@@ -34,8 +34,8 @@ func CreateTable(conn *pgx.Conn) error {
 	_, err := conn.Exec(context.Background(), `
 		CREATE TABLE IF NOT EXISTS urls (
 		id SERIAL PRIMARY KEY,
-		slug VARCHAR(255),
-		ogurl VARCHAR(255)
+		slug VARCHAR(3),
+		ogurl TEXT
 		);
 	`)
 	if err != nil {
